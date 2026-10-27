@@ -24,7 +24,7 @@ Options: cameras, regions (comma separated), minimum score, watched plates, endp
 The image processing entities do not poll. Call `image_processing.scan` to run them. Camera snapshots are always uploaded as bytes, because the API refuses private or LAN URLs.
 
 ## Event `nakordoni_plate_vehicle_detected`
-`plate`, `confidence`, `region_code`, `vehicle_type`, `box`, `entity_id`, `camera_entity`. The integration fires one event for each plate that is at or above the minimum score. For now, `region` and `vehicle` are `null`.
+`plate`, `confidence`, `region_code`, `vehicle_type`, `box`, `entity_id`, `camera_entity`. The integration fires one event for each plate that is at or above the minimum score. With the default endpoint (API v4), `region_code` is the ISO country of the plate (from the plate format) and `vehicle_type` is car, bus, truck or motorcycle; both are `null` when the API cannot tell. An endpoint URL on `/api/v2/` keeps returning `null` for both.
 
 ## Service `nakordoni_plate.recognize`
 Give exactly one of these fields: `entity_id` (cameras), `image_url` (public URL) or `file_path` (must be in `allowlist_external_dirs`). The service returns the results as a response.

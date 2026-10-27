@@ -3,7 +3,7 @@ from __future__ import annotations
 
 DOMAIN = "nakordoni_plate"
 
-DEFAULT_API_URL = "https://nakordoni.eu/api/v2/data/plate-recognition"
+DEFAULT_API_URL = "https://nakordoni.eu/api/v4/data/plate-recognition"
 OAUTH2_AUTHORIZE = "https://api.nakordoni.dev/oauth/authorize"
 OAUTH2_TOKEN = "https://api.nakordoni.dev/oauth/token"
 # First-party PUBLIC client (PKCE, no secret checked by the server). Client #13, F2187.
