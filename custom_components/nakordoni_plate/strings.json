@@ -1,0 +1,83 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nakordoni Plate Recognition",
+        "menu_options": {
+          "oauth": "Sign in with Nakordoni (OAuth)",
+          "api_key": "Use a DevAPI key"
+        }
+      },
+      "pick_implementation": {
+        "title": "Pick authentication method"
+      },
+      "api_key": {
+        "title": "DevAPI key",
+        "data": {
+          "api_key": "API key",
+          "api_url": "Endpoint URL"
+        },
+        "data_description": {
+          "api_url": "Full URL of the plate recognition endpoint."
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API key",
+      "cannot_connect": "Cannot connect to the DevAPI"
+    },
+    "abort": {
+      "already_configured": "Already configured",
+      "missing_credentials": "Add Nakordoni application credentials first (client ID/secret from the DevAPI portal).",
+      "oauth_error": "OAuth error",
+      "authorize_url_timeout": "Timeout generating the authorize URL",
+      "no_url_available": "No URL available",
+      "user_rejected_authorize": "Authorization was rejected",
+      "reauth_successful": "Re-authentication successful",
+      "oauth_timeout": "OAuth timeout",
+      "oauth_unauthorized": "OAuth unauthorized",
+      "oauth_failed": "OAuth failed"
+    },
+    "create_entry": {
+      "default": "Authenticated"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Plate recognition options",
+        "data": {
+          "cameras": "Cameras",
+          "regions": "Regions (comma separated, e.g. pl,ua,de)",
+          "min_score": "Minimum score",
+          "watched_plates": "Watched plates (comma separated)",
+          "api_url": "Endpoint URL",
+          "frigate_enabled": "Enable Frigate bridge (MQTT)",
+          "frigate_url": "Frigate URL",
+          "frigate_topic": "Frigate events topic",
+          "frigate_labels": "Frigate labels to process"
+        }
+      }
+    }
+  },
+  "services": {
+    "recognize": {
+      "name": "Recognize plates",
+      "description": "Run plate recognition on cameras, an image URL or a local file. Give exactly one.",
+      "fields": {
+        "entity_id": {
+          "name": "Cameras",
+          "description": "Camera entities (snapshot bytes are uploaded)."
+        },
+        "image_url": {
+          "name": "Image URL",
+          "description": "Public image URL (private/LAN URLs are refused by the API)."
+        },
+        "file_path": {
+          "name": "File path",
+          "description": "Local file in allowlist_external_dirs."
+        }
+      }
+    }
+  }
+}

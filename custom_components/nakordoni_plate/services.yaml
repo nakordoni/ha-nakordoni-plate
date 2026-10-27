@@ -1,0 +1,15 @@
+recognize:
+  fields:
+    entity_id:
+      selector:
+        entity:
+          domain: camera
+          multiple: true
+    image_url:
+      example: "https://example.com/car.jpg"
+      selector:
+        text:
+    file_path:
+      example: "/config/www/car.jpg"
+      selector:
+        text:
