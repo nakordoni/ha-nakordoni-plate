@@ -27,6 +27,8 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_entry_oauth2_flow, config_validation as cv, discovery
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_call_later
+from homeassistant.util import dt as dt_util
 
 from .api import NakordoniAuthError, NakordoniError, NakordoniPlateClient, RecognitionResult, normalize_plate
 from .const import (
@@ -41,6 +43,20 @@ from .const import (
     CONF_AUTH_TYPE,
     CONF_CAMERAS,
     CONF_COOLDOWN,
+    CONF_FAST_MODE,
+    CONF_GATES,
+    CONF_LOOSE_PLATES,
+    CONF_STRICT_MIN_SCORE,
+    CONF_STRICT_READS,
+    CONF_STRICT_WINDOW,
+    CONF_WATCHED_MODE,
+    DEFAULT_STRICT_MIN_SCORE,
+    DEFAULT_STRICT_READS,
+    DEFAULT_STRICT_WINDOW,
+    SIGNAL_STRICT,
+    STRICT_FOLLOWUP_DELAY,
+    WATCHED_LOOSE,
+    WATCHED_STRICT,
     CONF_FRIGATE_ENABLED,
     CONF_MIN_SCORE,
     CONF_REGIONS,
@@ -54,11 +70,12 @@ from .const import (
     SERVICE_RECOGNIZE,
     SIGNAL_RESULT,
 )
+from .gate import GateController, StrictMatcher, gate_cameras
 from .scanner import CameraScanner, Deduper
 
 _LOGGER = logging.getLogger(__name__)
 # image_processing has no config-entry support in core: loaded via discovery
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
@@ -75,6 +92,13 @@ class NakordoniData:
     scanner: CameraScanner | None = None
     unsubs: list[Any] = field(default_factory=list)
     ip_entities: list[Any] = field(default_factory=list)
+    strict_plates: set[str] = field(default_factory=set)  # watched plates in strict mode
+    matcher: StrictMatcher | None = None
+    gates: GateController | None = None
+    fast: dict[str, bool] = field(default_factory=dict)
+
+    def is_strict(self, plate: str) -> bool:
+        return plate in self.strict_plates
 
 
 type NakordoniConfigEntry = ConfigEntry[NakordoniData]
@@ -140,6 +164,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: NakordoniConfigEntry) ->
         cameras=list(opts.get(CONF_CAMERAS, [])),
         dedupe=Deduper(float(opts.get(CONF_COOLDOWN, DEFAULT_COOLDOWN))),
     )
+    data = entry.runtime_data
+    # Entries from before v0.4.0 have no mode: they keep the old loose behaviour.
+    mode = opts.get(CONF_WATCHED_MODE, WATCHED_LOOSE)
+    loose = {normalize_plate(p) for p in _split(opts.get(CONF_LOOSE_PLATES))}
+    data.strict_plates = {p for p in data.watched if p and mode == WATCHED_STRICT and p not in loose}
+    data.matcher = StrictMatcher(
+        float(opts.get(CONF_STRICT_MIN_SCORE, DEFAULT_STRICT_MIN_SCORE)),
+        int(opts.get(CONF_STRICT_READS, DEFAULT_STRICT_READS)),
+        float(opts.get(CONF_STRICT_WINDOW, DEFAULT_STRICT_WINDOW)),
+    )
+    gates = list(opts.get(CONF_GATES) or [])
+    data.gates = GateController(hass, gates)
+    data.fast = camera_fast_modes(opts, data.cameras)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await discovery.async_load_platform(
         hass, Platform.IMAGE_PROCESSING, DOMAIN, {"entry_id": entry.entry_id}, {}
@@ -153,6 +190,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: NakordoniConfigEntry) ->
     entry.runtime_data.unsubs.extend(scanner.async_start())
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
+
+
+def camera_fast_modes(opts: Any, cameras: list[str]) -> dict[str, bool]:
+    """Saved per-camera fast mode; default ON for a camera that feeds a gate."""
+    saved = opts.get(CONF_FAST_MODE) or {}
+    gate_cams: set[str] = set()
+    for g in opts.get(CONF_GATES) or []:
+        gate_cams.update(gate_cameras(g, cameras))
+    return {c: bool(saved.get(c, c in gate_cams)) for c in set(cameras) | set(saved)}
 
 
 async def _reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -177,11 +223,18 @@ async def async_recognize_and_publish(
 ) -> RecognitionResult:
     """Recognize, filter by min score, fire one event per plate, notify entities."""
     data = entry.runtime_data
+    extras: dict[str, Any] = {}
+    if data.fast.get(source):
+        # Skips the vehicle detector (~0.1-0.2 s). An API that ignores it still works.
+        extras["config"] = {"mode": "fast", "threshold": data.min_score}
+    if source.startswith("camera."):
+        extras["camera_id"] = source
+        extras["timestamp"] = dt_util.utcnow().isoformat()
     try:
         if image is not None:
-            raw = await data.client.recognize_bytes(image)
+            raw = await data.client.recognize_bytes(image, extras=extras or None)
         else:
-            raw = await data.client.recognize_url(image_url or "")
+            raw = await data.client.recognize_url(image_url or "", extras=extras or None)
     except NakordoniAuthError as err:
         entry.async_start_reauth(hass)
         raise HomeAssistantError(f"Nakordoni auth failed: {err}") from err
@@ -206,7 +259,36 @@ async def async_recognize_and_publish(
             },
         )
     async_dispatcher_send(hass, SIGNAL_RESULT.format(entry.entry_id), source, result)
+    await _async_strict(hass, entry, source, raw)
     return result
+
+
+async def _async_strict(hass: HomeAssistant, entry: NakordoniConfigEntry, source: str, raw: RecognitionResult) -> None:
+    """Strict matching on the TOP reading; gates open only from here."""
+    data = entry.runtime_data
+    if data.matcher is None or not (data.strict_plates or (data.gates and data.gates.gates)):
+        return
+    match, pending = data.matcher.feed(source, raw.results)
+    if match is not None:
+        if data.is_strict(match.plate):
+            async_dispatcher_send(hass, SIGNAL_STRICT.format(entry.entry_id), match)
+        if data.gates is not None:
+            # A gate plate always uses strict matching, whatever the sensor mode.
+            await data.gates.async_handle(match)
+        return
+    if pending and data.scanner is not None and source in data.cameras:
+        top = data.matcher.current(source)
+        if top and data.gates is not None and data.gates.wants(top, source):
+            # One read so far: scan again soon so the N-read rule can complete.
+            scanner = data.scanner
+
+            @callback
+            def _again(_now) -> None:
+                entry.async_create_background_task(
+                    hass, scanner.async_scan(source, force=True), f"nakordoni_plate strict re-scan {source}"
+                )
+
+            data.unsubs.append(async_call_later(hass, STRICT_FOLLOWUP_DELAY, _again))
 
 
 def result_to_dict(result: RecognitionResult) -> dict[str, Any]:

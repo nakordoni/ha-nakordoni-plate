@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from dataclasses import dataclass, field
 import re
 from typing import Any, Awaitable, Callable
@@ -85,23 +86,47 @@ class NakordoniPlateClient:
         return {"X-API-Key": token, "Accept": "application/json"}
 
     async def recognize_bytes(
-        self, image: bytes, regions: list[str] | None = None
+        self, image: bytes, regions: list[str] | None = None, *, extras: dict[str, Any] | None = None
     ) -> RecognitionResult:
+        """Upload bytes. ``extras`` = optional v4 fields (config, camera_id, timestamp)."""
         if len(image) > MAX_IMAGE_BYTES:
             raise NakordoniError("image larger than 8 MB")
-        form = aiohttp.FormData()
-        form.add_field("image", image, filename="image.jpg", content_type="image/jpeg")
-        for reg in regions or []:
-            form.add_field("regions", reg)
-        return await self._post(data=form)
+
+        def form(with_extras: bool) -> aiohttp.FormData:
+            f = aiohttp.FormData()
+            f.add_field("image", image, filename="image.jpg", content_type="image/jpeg")
+            for reg in regions or []:
+                f.add_field("regions", reg)
+            for key, val in (extras or {}).items() if with_extras else ():
+                # multipart: objects go as a JSON string, scalars as text
+                f.add_field(key, json.dumps(val) if isinstance(val, (dict, list)) else str(val))
+            return f
+
+        return await self._post_with_fallback(lambda w: {"data": form(w)}, bool(extras))
 
     async def recognize_url(
-        self, image_url: str, regions: list[str] | None = None
+        self, image_url: str, regions: list[str] | None = None, *, extras: dict[str, Any] | None = None
     ) -> RecognitionResult:
-        body: dict[str, Any] = {"image_url": image_url}
-        if regions:
-            body["regions"] = regions
-        return await self._post(json=body)
+        def body(with_extras: bool) -> dict[str, Any]:
+            b: dict[str, Any] = {"image_url": image_url}
+            if regions:
+                b["regions"] = regions
+            if with_extras:
+                b.update(extras or {})
+            return {"json": b}
+
+        return await self._post_with_fallback(body, bool(extras))
+
+    async def _post_with_fallback(self, build: Callable[[bool], dict[str, Any]], has_extras: bool) -> RecognitionResult:
+        """An older API may reject the new optional fields with HTTP 400: retry once without."""
+        try:
+            return await self._post(**build(has_extras))
+        except NakordoniAuthError:
+            raise
+        except NakordoniError as err:
+            if not has_extras or not str(err).startswith("HTTP 400"):
+                raise
+            return await self._post(**build(False))
 
     async def recognize_base64(
         self, image: bytes, regions: list[str] | None = None

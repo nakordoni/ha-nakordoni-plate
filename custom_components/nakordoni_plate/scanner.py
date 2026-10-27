@@ -141,14 +141,19 @@ class CameraScanner:
 
         return _cb
 
-    async def async_scan(self, cam: str) -> bool:
-        """Scan one camera now. Returns True when an API call was made."""
+    async def async_scan(self, cam: str, force: bool = False) -> bool:
+        """Scan one camera now. Returns True when an API call was made.
+
+        ``force`` skips the cooldown (strict-mode follow-up read for a gate).
+        """
         state = self.hass.states.get(cam)
         if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return False
         now = dt_util.utcnow().timestamp()
         last = self._last_scan.get(cam)
-        if cam in self._busy or (last is not None and now - last < self.cooldown - _COOLDOWN_SLACK):
+        if cam in self._busy or (
+            not force and last is not None and now - last < self.cooldown - _COOLDOWN_SLACK
+        ):
             return False
         self._last_scan[cam] = now
         self._busy.add(cam)

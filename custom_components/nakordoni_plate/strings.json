@@ -56,11 +56,21 @@
           "frigate_url": "Frigate URL",
           "frigate_topic": "Frigate events topic",
           "frigate_labels": "Frigate labels to process",
-          "cooldown": "Cooldown per camera (seconds)"
+          "cooldown": "Cooldown per camera (seconds)",
+          "watched_mode": "Watched-plate mode",
+          "loose_plates": "Plates in notify-only mode (comma separated, optional)",
+          "strict_min_score": "Strict mode: minimum score",
+          "strict_reads": "Strict mode: matching reads in a row",
+          "strict_window": "Strict mode: time window (seconds)",
+          "configure_gates": "Set up gate opening (next page)"
         },
         "description": "Pick the cameras to scan. On the next pages you choose, per camera, when it is scanned. Each scan uses one API call.",
         "data_description": {
-          "cooldown": "Minimum time between two scans of one camera. The same plate on the same camera inside this time fires no new event."
+          "cooldown": "Minimum time between two scans of one camera. The same plate on the same camera inside this time fires no new event.",
+          "watched_mode": "Strict: only the top reading counts, the plate must match exactly, and N reads in a row inside the window must match. Use strict for gates. Loose: any reading or candidate counts (notify only, not for gates).",
+          "loose_plates": "These watched plates use loose mode. All other watched plates use the mode above.",
+          "strict_reads": "The watched-plate sensor turns on (and a gate opens) only after this number of matching reads in a row.",
+          "configure_gates": "Add, keep or remove gates. A gate opens only on a strict match."
         }
       },
       "camera": {
@@ -69,16 +79,45 @@
         "data": {
           "scan_mode": "Scan mode",
           "motion_entity": "Motion sensor",
-          "scan_interval": "Scan every (seconds)"
+          "scan_interval": "Scan every (seconds)",
+          "fast_mode": "Fast mode (skip the vehicle detector)"
         },
         "data_description": {
           "motion_entity": "Binary sensor (motion, occupancy or presence). A scan runs when it changes from off to on.",
-          "scan_interval": "Used by \"Every N seconds\". Minimum 5."
+          "scan_interval": "Used by \"Every N seconds\". Minimum 5.",
+          "fast_mode": "Sends config mode=fast to the API (about 0.1-0.2 s faster). On by default for cameras that feed a gate."
+        }
+      },
+      "gates": {
+        "title": "Gate opening",
+        "description": "A gate opens only on a strict match. Keep a manual or remote way to open the gate. Never make this the only access method for emergency services.",
+        "data": {
+          "keep_gates": "Keep these gates (clear one to remove it)",
+          "add_gate": "Add a gate (next page)"
+        }
+      },
+      "gate": {
+        "title": "Gate",
+        "description": "The gate entity is a cover (open), switch (turn on), button (press) or lock (unlock).",
+        "data": {
+          "name": "Name",
+          "plates": "Plates that open this gate",
+          "entity": "Gate entity",
+          "cameras": "Allowed cameras (empty = all)",
+          "start": "Allowed from (optional)",
+          "end": "Allowed until (optional)",
+          "cooldown": "Re-open cooldown (seconds)"
+        },
+        "data_description": {
+          "start": "Leave start and end empty to allow at any time. A start later than the end means a window over midnight.",
+          "cooldown": "After an opening, this gate does not open again inside this time."
         }
       }
     },
     "error": {
-      "motion_required": "Pick a motion sensor for \"On motion\"."
+      "motion_required": "Pick a motion sensor for \"On motion\".",
+      "plates_required": "Pick at least one plate.",
+      "gate_entity_domain": "Pick a cover, switch, button or lock."
     }
   },
   "services": {
@@ -107,6 +146,12 @@
         "off": "Off (manual only)",
         "motion": "On motion",
         "interval": "Every N seconds"
+      }
+    },
+    "watched_mode": {
+      "options": {
+        "strict": "Strict (for gates)",
+        "loose": "Loose: notify only, not for gates"
       }
     }
   }

@@ -56,3 +56,40 @@ DEFAULT_SCAN_INTERVAL = 10  # form default when the user picks "every N seconds"
 DEFAULT_AUTO_INTERVAL = 30  # default for a new camera without a motion sensor
 DEFAULT_COOLDOWN = 10
 MOTION_DEVICE_CLASSES = ("motion", "occupancy", "presence")
+
+# Strict watched-plate mode + gate opening (v0.4.0).
+CONF_WATCHED_MODE = "watched_mode"
+WATCHED_STRICT = "strict"
+WATCHED_LOOSE = "loose"  # old behaviour: candidates count; notify only, not for gates
+WATCHED_MODES = [WATCHED_STRICT, WATCHED_LOOSE]
+CONF_LOOSE_PLATES = "loose_plates"  # per-plate override: these use loose mode
+CONF_STRICT_MIN_SCORE = "strict_min_score"
+CONF_STRICT_READS = "strict_reads"
+CONF_STRICT_WINDOW = "strict_window"
+DEFAULT_STRICT_MIN_SCORE = 0.90
+DEFAULT_STRICT_READS = 2
+DEFAULT_STRICT_WINDOW = 15
+# Follow-up scan after a first strict read, so motion mode can reach N reads.
+STRICT_FOLLOWUP_DELAY = 1.0
+
+CONF_CONFIGURE_GATES = "configure_gates"
+CONF_GATES = "gates"  # list of gate dicts
+CONF_GATE_ID = "id"
+CONF_GATE_NAME = "name"
+CONF_GATE_PLATES = "plates"
+CONF_GATE_ENTITY = "entity"
+CONF_GATE_CAMERAS = "cameras"
+CONF_GATE_START = "start"
+CONF_GATE_END = "end"
+CONF_GATE_COOLDOWN = "cooldown"
+DEFAULT_GATE_COOLDOWN = 60
+GATE_ACTIONS = {
+    "cover": "open_cover",
+    "switch": "turn_on",
+    "button": "press",
+    "lock": "unlock",
+}
+EVENT_GATE_OPENED = f"{DOMAIN}_gate_opened"
+SIGNAL_STRICT = f"{DOMAIN}_strict_{{}}"  # format with entry_id
+
+CONF_FAST_MODE = "fast_mode"  # {camera_entity: bool}
