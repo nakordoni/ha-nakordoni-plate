@@ -1,6 +1,9 @@
 {
   "domain": "nakordoni_plate",
   "name": "Nakordoni Plate Recognition",
+  "after_dependencies": [
+    "mqtt"
+  ],
   "codeowners": [
     "@nakordoni"
   ],
@@ -10,13 +13,10 @@
     "camera",
     "http"
   ],
-  "after_dependencies": [
-    "mqtt"
-  ],
   "documentation": "https://github.com/nakordoni/ha-nakordoni-plate",
   "integration_type": "service",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/nakordoni/ha-nakordoni-plate/issues",
   "requirements": [],
-  "version": "0.3.0",
-  "issue_tracker": "https://github.com/nakordoni/ha-nakordoni-plate/issues"
+  "version": "0.3.0"
 }
