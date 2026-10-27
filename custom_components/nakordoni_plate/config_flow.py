@@ -21,21 +21,32 @@ from .const import (
     AUTH_OAUTH,
     CONF_API_URL,
     CONF_AUTH_TYPE,
+    CONF_CAMERA_SCAN,
     CONF_CAMERAS,
+    CONF_COOLDOWN,
     CONF_FRIGATE_ENABLED,
     CONF_FRIGATE_LABELS,
     CONF_FRIGATE_TOPIC,
     CONF_FRIGATE_URL,
     CONF_MIN_SCORE,
+    CONF_MOTION_ENTITY,
     CONF_REGIONS,
+    CONF_SCAN_INTERVAL,
+    CONF_SCAN_MODE,
     CONF_WATCHED_PLATES,
     DEFAULT_API_URL,
+    DEFAULT_COOLDOWN,
+    DEFAULT_SCAN_INTERVAL,
     DEFAULT_FRIGATE_LABELS,
     DEFAULT_FRIGATE_TOPIC,
     DEFAULT_FRIGATE_URL,
     DEFAULT_MIN_SCORE,
     DOMAIN,
+    MIN_SCAN_INTERVAL,
+    SCAN_MODES,
+    SCAN_MOTION,
 )
+from .scanner import camera_scan_config
 
 CONF_API_KEY = "api_key"
 
@@ -103,16 +114,26 @@ class NakordoniPlateConfigFlow(
 
 
 class NakordoniOptionsFlow(OptionsFlow):
-    """Regions, min score, watched plates, cameras, Frigate bridge."""
+    """Step 1: cameras, filters, cooldown, Frigate. Step 2: one scan-mode form per camera."""
+
+    def __init__(self) -> None:
+        self._opts: dict[str, Any] = {}
+        self._pending: list[str] = []
+        self._scan: dict[str, dict[str, Any]] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            self._opts = dict(user_input)
+            self._pending = list(user_input.get(CONF_CAMERAS, []))
+            return await self.async_step_camera()
         o = self.config_entry.options
         schema = vol.Schema(
             {
                 vol.Optional(CONF_CAMERAS, default=o.get(CONF_CAMERAS, [])): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="camera", multiple=True)
+                ),
+                vol.Optional(CONF_COOLDOWN, default=o.get(CONF_COOLDOWN, DEFAULT_COOLDOWN)): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=0, max=3600, step=1, unit_of_measurement="s", mode=selector.NumberSelectorMode.BOX)
                 ),
                 vol.Optional(CONF_REGIONS, default=o.get(CONF_REGIONS, "")): str,
                 vol.Optional(CONF_MIN_SCORE, default=o.get(CONF_MIN_SCORE, DEFAULT_MIN_SCORE)): selector.NumberSelector(
@@ -127,3 +148,41 @@ class NakordoniOptionsFlow(OptionsFlow):
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
+
+    async def async_step_camera(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            cam = self._pending[0]
+            if user_input.get(CONF_SCAN_MODE) == SCAN_MOTION and not user_input.get(CONF_MOTION_ENTITY):
+                errors[CONF_MOTION_ENTITY] = "motion_required"
+            else:
+                self._scan[cam] = {
+                    CONF_SCAN_MODE: user_input[CONF_SCAN_MODE],
+                    CONF_MOTION_ENTITY: user_input.get(CONF_MOTION_ENTITY),
+                    CONF_SCAN_INTERVAL: int(user_input.get(CONF_SCAN_INTERVAL) or DEFAULT_SCAN_INTERVAL),
+                }
+                self._pending.pop(0)
+        if not self._pending:
+            return self.async_create_entry(data={**self._opts, CONF_CAMERA_SCAN: self._scan})
+        cam = self._pending[0]
+        cfg = camera_scan_config(self.hass, dict(self.config_entry.options), cam)
+        motion = {"suggested_value": cfg.get(CONF_MOTION_ENTITY)} if cfg.get(CONF_MOTION_ENTITY) else {}
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SCAN_MODE, default=cfg[CONF_SCAN_MODE]): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=SCAN_MODES, translation_key="scan_mode", mode=selector.SelectSelectorMode.LIST)
+                ),
+                vol.Optional(CONF_MOTION_ENTITY, description=motion): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="binary_sensor")
+                ),
+                vol.Optional(CONF_SCAN_INTERVAL, default=cfg.get(CONF_SCAN_INTERVAL) or DEFAULT_SCAN_INTERVAL): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=MIN_SCAN_INTERVAL, max=86400, step=1, unit_of_measurement="s", mode=selector.NumberSelectorMode.BOX)
+                ),
+            }
+        )
+        state = self.hass.states.get(cam)
+        name = state.name if state else cam
+        return self.async_show_form(
+            step_id="camera", data_schema=schema, errors=errors,
+            description_placeholders={"camera": f"{name} ({cam})"},
+        )

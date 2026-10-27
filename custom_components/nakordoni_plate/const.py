@@ -40,3 +40,19 @@ ATTR_FILE_PATH = "file_path"
 ATTR_CAMERA_ENTITY = "camera_entity"
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+# Auto-scan (v0.3.0): per-camera scan mode, so no automation is needed.
+CONF_CAMERA_SCAN = "camera_scan"  # {camera_entity: {scan_mode, motion_entity, scan_interval}}
+CONF_SCAN_MODE = "scan_mode"
+CONF_MOTION_ENTITY = "motion_entity"
+CONF_SCAN_INTERVAL = "scan_interval"
+CONF_COOLDOWN = "cooldown"
+SCAN_OFF = "off"
+SCAN_MOTION = "motion"
+SCAN_INTERVAL = "interval"
+SCAN_MODES = [SCAN_OFF, SCAN_MOTION, SCAN_INTERVAL]
+MIN_SCAN_INTERVAL = 5
+DEFAULT_SCAN_INTERVAL = 10  # form default when the user picks "every N seconds"
+DEFAULT_AUTO_INTERVAL = 30  # default for a new camera without a motion sensor
+DEFAULT_COOLDOWN = 10
+MOTION_DEVICE_CLASSES = ("motion", "occupancy", "presence")

@@ -12,7 +12,7 @@ from homeassistant.util import dt as dt_util
 from . import NakordoniConfigEntry, async_recognize_and_publish
 from .const import DOMAIN
 
-# Manual: call image_processing.scan from an automation (motion, Frigate...).
+# No polling here: auto-scan (scanner.py) or image_processing.scan drives it.
 SCAN_INTERVAL = timedelta(days=3650)
 
 

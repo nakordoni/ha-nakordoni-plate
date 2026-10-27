@@ -55,9 +55,30 @@
           "frigate_enabled": "Enable Frigate bridge (MQTT)",
           "frigate_url": "Frigate URL",
           "frigate_topic": "Frigate events topic",
-          "frigate_labels": "Frigate labels to process"
+          "frigate_labels": "Frigate labels to process",
+          "cooldown": "Cooldown per camera (seconds)"
+        },
+        "description": "Pick the cameras to scan. On the next pages you choose, per camera, when it is scanned. Each scan uses one API call.",
+        "data_description": {
+          "cooldown": "Minimum time between two scans of one camera. The same plate on the same camera inside this time fires no new event."
+        }
+      },
+      "camera": {
+        "title": "Auto-scan",
+        "description": "Camera: {camera}\n\nEach scan uses one API call. Scans only run while the camera is available.",
+        "data": {
+          "scan_mode": "Scan mode",
+          "motion_entity": "Motion sensor",
+          "scan_interval": "Scan every (seconds)"
+        },
+        "data_description": {
+          "motion_entity": "Binary sensor (motion, occupancy or presence). A scan runs when it changes from off to on.",
+          "scan_interval": "Used by \"Every N seconds\". Minimum 5."
         }
       }
+    },
+    "error": {
+      "motion_required": "Pick a motion sensor for \"On motion\"."
     }
   },
   "services": {
@@ -77,6 +98,15 @@
           "name": "File path",
           "description": "Local file in allowlist_external_dirs."
         }
+      }
+    }
+  },
+  "selector": {
+    "scan_mode": {
+      "options": {
+        "off": "Off (manual only)",
+        "motion": "On motion",
+        "interval": "Every N seconds"
       }
     }
   }

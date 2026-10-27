@@ -40,11 +40,13 @@ from .const import (
     CONF_API_URL,
     CONF_AUTH_TYPE,
     CONF_CAMERAS,
+    CONF_COOLDOWN,
     CONF_FRIGATE_ENABLED,
     CONF_MIN_SCORE,
     CONF_REGIONS,
     CONF_WATCHED_PLATES,
     DEFAULT_API_URL,
+    DEFAULT_COOLDOWN,
     DEFAULT_MIN_SCORE,
     DOMAIN,
     EVENT_VEHICLE_DETECTED,
@@ -52,6 +54,7 @@ from .const import (
     SERVICE_RECOGNIZE,
     SIGNAL_RESULT,
 )
+from .scanner import CameraScanner, Deduper
 
 _LOGGER = logging.getLogger(__name__)
 # image_processing has no config-entry support in core: loaded via discovery
@@ -68,6 +71,8 @@ class NakordoniData:
     min_score: float
     watched: list[str]
     cameras: list[str]
+    dedupe: Deduper = field(default_factory=lambda: Deduper(DEFAULT_COOLDOWN))
+    scanner: CameraScanner | None = None
     unsubs: list[Any] = field(default_factory=list)
     ip_entities: list[Any] = field(default_factory=list)
 
@@ -133,6 +138,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NakordoniConfigEntry) ->
         min_score=float(opts.get(CONF_MIN_SCORE, DEFAULT_MIN_SCORE)),
         watched=[normalize_plate(p) for p in _split(opts.get(CONF_WATCHED_PLATES))],
         cameras=list(opts.get(CONF_CAMERAS, [])),
+        dedupe=Deduper(float(opts.get(CONF_COOLDOWN, DEFAULT_COOLDOWN))),
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await discovery.async_load_platform(
@@ -142,6 +148,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: NakordoniConfigEntry) ->
         from .frigate import async_setup_frigate
 
         await async_setup_frigate(hass, entry)
+    scanner = CameraScanner(hass, entry)
+    entry.runtime_data.scanner = scanner
+    entry.runtime_data.unsubs.extend(scanner.async_start())
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
 
@@ -180,6 +189,9 @@ async def async_recognize_and_publish(
         raise HomeAssistantError(str(err)) from err
     result = raw.filtered(data.min_score).in_regions(data.regions)
     for r in result.results:
+        # Same plate on the same camera inside the cooldown: no second event.
+        if not data.dedupe.is_new(source, normalize_plate(str(r.get("plate") or ""))):
+            continue
         region = r.get("region") or {}
         hass.bus.async_fire(
             EVENT_VEHICLE_DETECTED,
